@@ -289,7 +289,22 @@ defmodule BorsNG.Worker.Batcher do
     batch
     |> Batch.changeset(%{state: status, commit: commit, last_polled: now})
     |> Repo.update!()
+    Project.ping!(batch.project_id)
+    status
+  end
 
+  defp start_waiting_merged_batch(_batch, [], _, _) do
+    {:canceled, nil}
+  end
+
+  defp start_waiting_merged_batch(batch, patch_links, base, %{tree: tree}) do
+    repo_conn = get_repo_conn(batch.project)
+    patches = Enum.map(patch_links, &(&1.patch))
+    repo_conn
+    |> Batcher.GetBorsToml.get("#{batch.project.staging_branch}.tmp")
+    |> case do
+      {:ok, toml} ->
+        parents = if toml.use_squash_merge do
           stmp = "#{batch.project.staging_branch}.tmp2"
           GitHub.force_push!(repo_conn, base.commit, stmp)
 
